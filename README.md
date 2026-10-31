@@ -46,6 +46,9 @@
 3. （選用）設定 API Token：把 `.env.example` 複製成 `.env`，填入 FinMind Token。
    不註冊也能執行（免費額度約每小時 300 次）；註冊後約每小時 600 次。
 
+   **取得 Token**：到 [FinMind 官網](https://finmindtrade.com/) 免費註冊並登入，在會員頁面複製 API Token。
+   API 使用說明請見 [FinMind 文件](https://finmind.github.io/)。
+
    ```bash
    cp .env.example .env      # Windows PowerShell：Copy-Item .env.example .env
    ```
