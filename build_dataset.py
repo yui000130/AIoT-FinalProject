@@ -11,7 +11,7 @@ build_dataset.py －Point-in-Time「公司 × 年份」資料集建構（規劃�
 
 輸入：data/raw/*.parquet（collect_data.py 產生）
 輸出：data/dataset.parquet（每列 = 公司 × 特徵年，含特徵與標記）
-負責：組員 C
+負責：游雅筑
 """
 
 FEATURE_YEARS = list(range(2013, 2021))

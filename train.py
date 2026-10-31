@@ -12,7 +12,7 @@ train.py －模型訓練（規劃中）
 
 輸入：data/dataset.parquet
 輸出：models/{model}_round{n}.*
-負責：組員 C
+負責：游雅筑
 """
 
 FOLDS = [

@@ -2,6 +2,14 @@
 
 這個資料夾之後會放 `evaluate.py` 與 `agent.py` 產生的實驗結果。**目前尚無任何實驗結果。**
 
+## 已放入的檔案
+
+| 檔案 | 內容 |
+|---|---|
+| `tsmc_crosscheck.csv` | 資料正確性核對（非實驗結果）：台積電 FinMind 數值與 Yahoo 股市逐項比對，8/8 一致，附來源網址。核對日期 2026-10-31 |
+
+## 規劃中的實驗結果
+
 | 實驗 | 預計檔案 | 內容 |
 |---|---|---|
 | E1 | `e1_ranking_metrics.csv` | 各模型與 Baseline 的 Precision@20/50、Recall@50、PR-AUC |

@@ -8,7 +8,7 @@ agent.py －LLM Agent（規劃中）
 
 輸入：使用者查詢（股票代號、分析日期、篩選條件、追問）
 輸出：結構化分析報告（潛力等級、機率 vs 5% 基準率、支持與反對證據、相似案例、不確定性）
-負責：組員 A
+負責：許雁婷
 """
 
 BASE_RATE = 0.05
@@ -34,7 +34,13 @@ def run_tools(plan):
 
 
 def retrieve_similar_cases(features, analysis_date, k=5):
-    """kNN 找特徵日早於分析日的相似成功與失敗案例。"""
+    """kNN 只在「特徵日 ≤ 分析日 − 5 年」的歷史樣本中找相似的成功與失敗案例（結果已揭曉）。"""
+    # TODO: 沒有可用樣本時（分析日早於 2018-04）回傳空清單，報告顯示「尚無已揭曉的歷史案例」
+    raise NotImplementedError
+
+
+def summarize_news(stock_id, analysis_date):
+    """用 LLM 摘要公告日 ≤ 分析日的重大訊息（公開資訊觀測站）；只摘要原文，不產生數字。"""
     # TODO
     raise NotImplementedError
 

@@ -9,9 +9,11 @@ collect_data.py －全市場資料收集（規劃中）
   - 可接續：已抓過的（股票, 資料集）跳過，中斷後重跑會從斷點接著抓
   - 輸出 Parquet：每個資料集一個檔案，存在 data/raw/
 
+另外抓 0050 的每日股價與除權息結果，作為實驗 E2 的買進持有基準（0050 是 ETF，不在普通股清單內）。
+
 輸入：TaiwanStockInfo、TaiwanStockDelisting（股票清單）
 輸出：data/raw/{dataset}.parquet
-負責：組員 C
+負責：游雅筑
 """
 
 DATASETS = [
@@ -40,6 +42,12 @@ def fetch_with_quota(dataset, data_id, start_date):
 def load_progress():
     """讀取已完成的（股票, 資料集）清單，用於中斷後接續。"""
     # TODO: 從 data/raw/ 既有檔案或進度檔判斷已完成項目
+    raise NotImplementedError
+
+
+def collect_benchmark():
+    """抓 0050 的 TaiwanStockPrice 與 TaiwanStockDividendResult，供 E2 使用。"""
+    # TODO
     raise NotImplementedError
 
 

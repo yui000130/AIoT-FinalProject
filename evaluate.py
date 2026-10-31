@@ -14,7 +14,7 @@ evaluate.py －回測與 Baseline 比較（規劃中）
 
 輸入：data/dataset.parquet、models/
 輸出：results/ 表格與圖
-負責：組員 C
+負責：游雅筑
 """
 
 

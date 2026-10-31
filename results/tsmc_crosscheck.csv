@@ -1,0 +1,9 @@
+﻿項目,期間,FinMind 數值,Yahoo 股市數值,是否一致,Yahoo 原始數值,來源
+EPS（元）,2025-Q3,17.44,17.44,是,17.44,https://tw.stock.yahoo.com/quote/2330.TW/eps
+EPS（元）,2025-Q4,19.51,19.51,是,19.51,https://tw.stock.yahoo.com/quote/2330.TW/eps
+EPS（元）,2026-Q1,22.08,22.08,是,22.08,https://tw.stock.yahoo.com/quote/2330.TW/eps
+EPS（元）,2026-Q2,27.25,27.25,是,27.25,https://tw.stock.yahoo.com/quote/2330.TW/eps
+月營收（億元）,2026-07,4675.81,4675.81,是,"467,580,548 仟元",https://tw.stock.yahoo.com/quote/2330.TW/revenue
+月營收（億元）,2026-08,5148.05,5148.05,是,"514,805,337 仟元",https://tw.stock.yahoo.com/quote/2330.TW/revenue
+月營收（億元）,2026-09,5118.57,5118.57,是,"511,857,399 仟元",https://tw.stock.yahoo.com/quote/2330.TW/revenue
+收盤價（元）,2026-10-30,2370.0,2370,是,"2,370",https://tw.stock.yahoo.com/quote/2330.TW
