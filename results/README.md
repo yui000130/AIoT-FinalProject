@@ -14,8 +14,8 @@
 |---|---|---|
 | E1 | `e1_ranking_metrics.csv` | 各模型與 Baseline 的 Precision@20/50、Recall@50、PR-AUC |
 | E2 | `e2_portfolio.csv`、`e2_portfolio.png` | 前 50 檔等權組合 vs 0050 的累積報酬與最大回撤 |
-| E3 | `e3_shap_ranking.csv`、`e3_shap.png` | SHAP 特徵排名與分組命中率 |
-| E4 | `e4_agent_eval.csv` | Agent 報告 vs 單純 LLM 的數字正確率、證據引用率、使用者評分 |
-| E5 | `e5_horizon_sensitivity.csv` | 3 年與 5 年觀察期的 Precision@50 比較 |
+| E3 | `e3_shap_ranking.csv`、`e3_shap.png` | SHAP 特徵排名；基本面暴漲股、炒作型暴漲股、普通股、期間下市公司四組的特徵中位數與命中率 |
+| E4 | `e4_agent_eval.csv` | Agent 報告 vs 單純 LLM 的數字正確率、證據引用率；（延伸）使用者評分 |
+| E5 | `e5_sensitivity.csv` | （延伸）觀察期 3 年 vs 5 年、主要 vs 對照標記、營收門檻 5% / 10% / 15% 的 Precision@50 比較 |
 
 每次更新結果時，請同步更新 `DESIGN.md` 第 11 節與 Change Log。

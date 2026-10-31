@@ -2,14 +2,14 @@
 evaluate.py －回測與 Baseline 比較（規劃中）
 
 執行 DESIGN.md 第 11 節的實驗：
-  E1：LightGBM vs 邏輯迴歸 vs 隨機 vs Yartseva 規則篩選 vs 單一因子
+  E1：預測主要標記；LightGBM vs 邏輯迴歸 vs 隨機 vs Yartseva 規則篩選 vs 單一因子
       指標：各輪與平均的 Precision@20/50、Recall@50、PR-AUC
   E2：每輪前 50 檔等權組合 vs 0050 買進持有
       指標：5 年累積報酬、最大回撤
-  E3：美股多倍股因子在台股是否成立
-      指標：SHAP 特徵排名、分組命中率
-  E5：觀察期改為 3 年的敏感度分析
-      指標：3 年與 5 年的 Precision@50 比較
+  E3：美股多倍股因子在台股是否成立；四組對照：基本面暴漲股、炒作型暴漲股、普通股、期間下市公司
+      指標：SHAP 特徵排名、四組特徵中位數、「有此特徵者成為暴漲股的比例」對比基準率
+  E5（延伸）：敏感度分析：① 觀察期 3 年 vs 5 年；② 主要標記 vs 對照標記；③ 營收門檻 5% / 10% / 15%
+      指標：各設定的 Precision@50 比較
 （E4 為 Agent 報告評估，見 agent.py）
 
 輸入：data/dataset.parquet、models/
@@ -49,13 +49,13 @@ def run_e2():
 
 
 def run_e3():
-    """E3：SHAP 特徵排名與分組命中率。"""
+    """E3：SHAP 特徵排名、四組特徵中位數與命中率。"""
     # TODO
     raise NotImplementedError
 
 
 def run_e5():
-    """E5：3 年觀察期敏感度分析。"""
+    """（延伸）E5：觀察期、標記定義、營收門檻的敏感度分析。"""
     # TODO
     raise NotImplementedError
 

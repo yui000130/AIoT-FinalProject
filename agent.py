@@ -4,14 +4,14 @@ agent.py －LLM Agent（規劃中）
 核心原則：數字一律由程式與模型計算，LLM 只負責規劃與解釋；
 報告中的數字會自動與工具輸出核對，不一致就重寫（最多 3 次，失敗則改用模板報告）。
 
-流程見 DESIGN.md 第 8 節 Algorithm 1。也負責實驗 E4（Agent 報告 vs 單純 LLM）。
+流程見 DESIGN.md 第 8 節 Algorithm 1。也負責實驗 E4（Agent 報告 vs 單純 LLM；核心為數字正確率，延伸為人工評分）。
 
 輸入：使用者查詢（股票代號、分析日期、篩選條件、追問）
-輸出：結構化分析報告（潛力等級、機率 vs 5% 基準率、支持與反對證據、相似案例、不確定性）
+輸出：結構化分析報告（潛力等級、機率 vs 基準率、支持與反對證據、相似案例、不確定性）
 負責：許雁婷
 """
 
-BASE_RATE = 0.05
+BASE_RATE = None  # 訓練資料中主要標記的正例比例，由 train.py 計算後讀入
 MAX_REWRITE = 3
 
 
@@ -40,13 +40,13 @@ def retrieve_similar_cases(features, analysis_date, k=5):
 
 
 def summarize_news(stock_id, analysis_date):
-    """用 LLM 摘要公告日 ≤ 分析日的重大訊息（公開資訊觀測站）；只摘要原文，不產生數字。"""
+    """（延伸）用 LLM 摘要公告日 ≤ 分析日的重大訊息（公開資訊觀測站）；只摘要原文，不產生數字。"""
     # TODO
     raise NotImplementedError
 
 
 def retrieve_knowledge(rule_results, shap_values):
-    """從 knowledge/ 檢索相關知識文件（RAG）。"""
+    """（延伸）從 knowledge/ 檢索相關知識文件（RAG）；未完成時回傳觸發規則的固定說明與出處。"""
     # TODO
     raise NotImplementedError
 

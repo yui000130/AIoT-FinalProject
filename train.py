@@ -1,7 +1,7 @@
 """
 train.py －模型訓練（規劃中）
 
-依 walk-forward 切分訓練兩種模型：
+依 walk-forward 切分訓練兩種模型，目標為主要標記 y_main（基本面驅動暴漲股）：
   - LightGBM：主模型
   - 邏輯迴歸：Baseline
 
@@ -36,7 +36,7 @@ def split(df, fold):
 
 
 def train_lightgbm(X, y):
-    """訓練 LightGBM；正例約 5%，需處理類別不平衡。"""
+    """訓練 LightGBM；主要標記正例少於 5%，需處理類別不平衡。"""
     # TODO
     raise NotImplementedError
 
