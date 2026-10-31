@@ -114,10 +114,10 @@ flowchart TD
 | 損益表 | `TaiwanStockFinancialStatements` | 毛利率、EBITDA、淨利、EPS | 19/20 | 4/10 |
 | 資產負債表 | `TaiwanStockBalanceSheet` | ROA、ROE、負債比、資產成長、帳面價值 | 19/20 | 5/10 |
 | 現金流量表 | `TaiwanStockCashFlowsStatement` | 營業現金流、FCF | 19/20 | 3/10 |
-| 月營收 | `TaiwanStockMonthRevenue` | 月營收年增率 | 20/20 | — |
+| 月營收 | `TaiwanStockMonthRevenue` | 月營收年增率 | 20/20 | 9/10 |
 | 每日股價 | `TaiwanStockPrice` | 報酬、波動度、市值（搭配股本） | 20/20 | 10/10 |
-| 本益比／淨值比／殖利率 | `TaiwanStockPER` | 估值特徵 | 20/20 | — |
-| 除權息結果 | `TaiwanStockDividendResult` | 計算含息報酬 | 20/20 | — |
+| 本益比／淨值比／殖利率 | `TaiwanStockPER` | 估值特徵 | 20/20 | 10/10 |
+| 除權息結果 | `TaiwanStockDividendResult` | 計算含息報酬 | 20/20 | 8/10 |
 | 股票基本資料 | `TaiwanStockInfo` | 股票清單、產業類別 | — | — |
 | 下市櫃名單 | `TaiwanStockDelisting` | 納入已下市公司 | — | — |
 
@@ -323,8 +323,6 @@ python verify_data.py
 - 8 個視窗合計約 **8,800～9,900** 筆樣本，前 5% 暴漲股約 **440～500** 筆
 - 含息報酬範例：鴻海 2012-04 → 2017-04 股價報酬 **6.9%**，含息報酬 **92.7%**，可見不計股利會嚴重低估報酬
 - 已用券商 App 核對台積電 4 季 EPS 與收盤價，**5/5 一致**
-
-> 註：`verify_data.py` 的樣本量表從 2012-04 開始列出 9 個視窗。研究採用的 8 個視窗是去掉 2012-04 那一列後的合計。
 
 ### 11.2 模型實驗（待完成）
 

@@ -47,7 +47,7 @@ N_DELISTED = 10                                 # 抽樣：2012 年後下市的�
 MUST_INCLUDE = ["2330", "2317", "2454"]         # 台積電、鴻海、聯發科一定要抽
 SEED = 42                                       # 固定亂數種子，每次抽到同一批，結果可重現
 SLEEP_SECONDS = 0.6                             # 每次請求間隔，避免太密集被擋
-WINDOW_YEARS = list(range(2012, 2021))          # 研究視窗起始年（資產負債表 2011 年底才有）
+WINDOW_YEARS = list(range(2013, 2021))          # 研究視窗起始年（資產負債表 2012 年底才有，所以從 2013 年 4 月起算）
 BASE = Path(__file__).resolve().parent
 CACHE_DIR = BASE / "cache"
 OUT_DIR = BASE / "output"
@@ -155,7 +155,7 @@ def total_return(price_df, div_df, start, end):
     return {
         "起始日": d0.date(), "起始價": p0, "結束日": d1.date(), "結束價": p1,
         "價格報酬": p1 / p0 - 1, "含息報酬": p1 / p0 * factor - 1,
-        "除權息次數": n_events, "期中下市": d1 < end - pd.Timedelta(days=10),
+        "除權息次數": n_events, "期中下市": d1 < end - pd.Timedelta(10, unit="D"),
     }
 
 
@@ -356,7 +356,7 @@ def main():
         f"- 目前上市普通股 {len(listed)} 家；2012 年後下市櫃 {delist_recent['stock_id'].nunique()} 家",
         "" if not stopped else "- **注意：API 次數用完，資料不完整，請一小時後重跑**",
         "", "## 各資料集是否抓得到", "", md_table(ds_summary),
-        "", "## 樣本量估計（2012–2020 每年 4 月底起算）", "", md_table(est), "",
+        "", "## 樣本量估計（2013–2020 每年 4 月底起算）", "", md_table(est), "",
         f"合計約 {total_low:,}～{total_high:,} 筆，前 5% 暴漲股約 "
         f"{round(total_low * 0.05):,}～{round(total_high * 0.05):,} 筆。",
         "上限包含之後下市的公司，但下市櫃表沒有區分上市或上櫃，所以會偏高。",
