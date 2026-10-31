@@ -39,19 +39,13 @@ def retrieve_similar_cases(features, analysis_date, k=5):
     raise NotImplementedError
 
 
-def summarize_news(stock_id, analysis_date):
-    """（延伸）用 LLM 摘要公告日 ≤ 分析日的重大訊息（公開資訊觀測站）；只摘要原文，不產生數字。"""
+def explain_rules(rule_results):
+    """從 knowledge/ 讀取觸發規則的固定說明與文獻出處，供報告引用。"""
     # TODO
     raise NotImplementedError
 
 
-def retrieve_knowledge(rule_results, shap_values):
-    """（延伸）從 knowledge/ 檢索相關知識文件（RAG）；未完成時回傳觸發規則的固定說明與出處。"""
-    # TODO
-    raise NotImplementedError
-
-
-def write_report(tool_outputs, knowledge):
+def write_report(tool_outputs, rule_explanations):
     """用 LLM 把工具輸出寫成報告。"""
     # TODO
     raise NotImplementedError
