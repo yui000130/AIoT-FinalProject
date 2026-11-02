@@ -100,6 +100,7 @@
 - [x] 用「每日股價＋除權息結果」自行計算 5 年含息報酬（免費 API 不提供還原股價）
 - [x] 台積電 4 季 EPS 與收盤價，與券商 App 核對 5/5 一致；另以 Yahoo 股市核對 4 季 EPS、3 個月營收、收盤價，8/8 一致（[`results/tsmc_crosscheck.csv`](results/tsmc_crosscheck.csv)）
 - [x] 系統設計文件（`DESIGN.md`）與規劃中程式的骨架
+- [x] 資料管線 Demo 網頁：用 30 檔抽樣資料示範特徵、5 年含息報酬與營收成長的計算（[`app.py`](app.py)、[`demo_pipeline.py`](demo_pipeline.py)），見下方 [Demo 網頁](#demo-網頁)
 
 ### 規劃中：核心目標（必定完成）
 
@@ -122,6 +123,43 @@
 ### 不納入本專題（列為 Future Work）
 
 重大訊息摘要、RAG 知識庫、補齊已下市公司財報、其他領域規則（資產成長快於 EBITDA 成長、景氣循環股）、使用季報與當年度月營收。
+
+---
+
+## Demo 網頁
+
+> 資料管線雛形：30 檔抽樣資料示範，非模型預測，也不代表全市場結論。研究與教學用途，不構成投資建議。
+
+在正式訓練模型之前，先用 `verify_data.py` 抓好的 30 檔抽樣資料，把「特徵怎麼算、5 年後的結果怎麼判定」做成可以操作的網頁，確認計算規則照 [DESIGN.md](DESIGN.md) 實作。這個網頁**不訓練模型、不接 LLM、不呼叫 API**，只讀本機的 `cache/`。
+
+| 分頁 | 內容 |
+|---|---|
+| ① 我們要找什麼樣的股票 | 用白話說明主要標記，並自動挑出三個例子：報酬遠高於 0050 且營收有成長、報酬高但營收沒成長、期間下市而無法判定 |
+| ② 時光機 | 選股票與特徵年，看當時可用的 10 項特徵（每項標明來源資料與公告時間、缺值原因）與 5 年後的結果 |
+| ③ 30 檔總表 | 每檔每年一列，可排序、可篩選 |
+
+![我們要找什麼樣的股票](results/demo/1_target.png)
+
+<details>
+<summary>其他兩個分頁的截圖</summary>
+
+![時光機](results/demo/2_time_machine.png)
+
+![30 檔總表](results/demo/3_table.png)
+
+</details>
+
+**在自己電腦上執行**（網頁只在本機開啟；原始資料不上傳，所以沒有公開網址）：
+
+```bash
+pip install -r requirements.txt
+python verify_data.py      # 抓 30 檔抽樣資料到 cache/（約 215 次 API，抓過就不再抓）
+python -c "import verify_data as v; [v.fetch(d, '0050', v.START_DATE) for d in ('TaiwanStockPrice', 'TaiwanStockDividendResult')]"
+                           # 補抓 0050 作為對照（2 次 API）
+streamlit run app.py       # 瀏覽器開啟 http://localhost:8501
+```
+
+計算規則與限制（例如 30 檔是抽樣所以不做前 5% 排名、疑似減資與 IFRS 口徑改變的處理）見 [DESIGN.md](DESIGN.md) 第 11.2 節。
 
 ---
 
@@ -155,6 +193,8 @@
    ```
 
    約使用 215 次 API。抓過的資料會快取在 `cache/`，重跑不會再花次數；如果中途次數用完，一小時後重跑會接著抓。
+
+5. （選用）開啟 Demo 網頁：見上方 [Demo 網頁](#demo-網頁)。
 
 ### `verify_data.py` 輸出檔案（`output/`）
 
@@ -192,17 +232,19 @@
 ├── .env.example              # 環境變數範本（Token、API 端點）
 ├── .gitignore
 ├── verify_data.py            # 已完成：資料可行性驗證
+├── demo_pipeline.py          # 已完成：Demo 用的 Point-in-Time 計算（30 檔抽樣）
 ├── collect_data.py           # 規劃中：全市場資料收集
 ├── build_dataset.py          # 規劃中：Point-in-Time 特徵與標記資料表
 ├── train.py                  # 規劃中：LightGBM 與邏輯迴歸訓練
 ├── evaluate.py               # 規劃中：walk-forward 回測與 Baseline 比較
 ├── rules.py                  # 規劃中：領域規則檢查
 ├── agent.py                  # 規劃中：LLM Agent
-├── app.py                    # 規劃中：Streamlit 網站
+├── app.py                    # Streamlit 網站（目前為資料管線 Demo；個股分析頁規劃中）
 ├── knowledge/                # 規劃中：規則說明與文獻出處
 │   └── README.md
-├── results/                  # 規劃中：實驗結果
-│   └── README.md
+├── results/                  # 驗證結果、Demo 截圖；實驗結果規劃中
+│   ├── README.md
+│   └── demo/                 # Demo 網頁截圖
 ├── cache/                    # 執行後產生：API 回應快取（不上傳）
 └── output/                   # 執行後產生：驗證結果（不上傳）
 ```

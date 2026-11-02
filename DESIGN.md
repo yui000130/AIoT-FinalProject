@@ -2,7 +2,7 @@
 
 > 本文件的目的：即使原開發者不在，下一位開發者仍能**理解、執行、驗證並繼續開發**本系統。
 >
-> **目前狀態：提案階段。** 只有「資料可行性驗證」已實作完成。標示「規劃中」的章節說明的是預計做法，**尚未實作，也沒有實驗結果**。
+> **目前狀態：提案階段。** 已實作完成「資料可行性驗證」與「資料管線 Demo（30 檔抽樣）」。標示「規劃中」的章節說明的是預計做法，**尚未實作，也沒有實驗結果**。
 >
 > 本系統為研究與教學用途，不構成投資建議。
 
@@ -377,6 +377,7 @@ PREPROCESSING: fit imputers/scalers/encoders on training rows only
 | 6. Domain Knowledge Integration | `rules.py`、`knowledge/` | 規劃中 |
 | 7. Decision / Recommendation | `agent.py` | 規劃中 |
 | 8. Output & Interaction | `app.py`、`agent.py` | 規劃中 |
+| 資料管線 Demo（30 檔抽樣） | `demo_pipeline.py`、`app.py` | Demo 已完成（見 11.2） |
 
 ---
 
@@ -399,9 +400,17 @@ python verify_data.py
 - 抽樣使用固定亂數種子 `SEED = 42`，每次抽到同一批股票
 - 如果 API 次數用完，程式會停止並保留已抓資料，一小時後重跑會接著抓
 
+**資料管線 Demo**（需先跑過 `verify_data.py`）：
+
+```bash
+# 補抓 0050 作為對照（2 次 API；verify_data.py 不會抓 0050）
+python -c "import verify_data as v; [v.fetch(d, '0050', v.START_DATE) for d in ('TaiwanStockPrice', 'TaiwanStockDividendResult')]"
+streamlit run app.py
+```
+
 **驗證方式**：打開 `output/5_tsmc_crosscheck.csv`，在「App 數值」欄填入看盤 App 的數字，比對是否一致。已填好的範例見 `results/tsmc_crosscheck.csv`。
 
-其他程式（`collect_data.py` 等）目前只有骨架，執行會出現 `NotImplementedError`。
+除了 `verify_data.py` 與 Demo（`demo_pipeline.py`、`app.py`），其他程式（`collect_data.py` 等）目前只有骨架，執行會出現 `NotImplementedError`。
 
 ---
 
@@ -433,7 +442,19 @@ python verify_data.py
 - 另以 Yahoo 股市核對台積電 4 季 EPS、3 個月營收、2026-10-30 收盤價，**8/8 一致**（核對表：`results/tsmc_crosscheck.csv`）
 - 以上為抽樣驗證。財報數字一致不代表整套含息報酬計算正確；全量資料完成後將再抽樣核對含息報酬
 
-### 11.2 模型實驗（待完成）
+### 11.2 已完成：資料管線 Demo（30 檔抽樣）
+
+`demo_pipeline.py` 只讀 `cache/`（11.1 的 30 檔抽樣，另補抓 0050），依 5.3–5.5 計算 2013–2020 年的特徵、5 年含息報酬與營收 CAGR；`app.py` 以 Streamlit 呈現。不訓練模型、不接 LLM。截圖見 `results/demo/`。
+
+- **與正式資料集的差異**：30 檔是抽樣，不做前 5% 排名（排名欄標「待全量母體」），判定只看營收成長條件；不做流動性過濾；交易日曆以 0050 的成交日期代替
+- **資料格式**：損益表為單季值，全年取 4 季加總；現金流量表為年初累計，取 12/31；股數以股本 ÷ 面額 10 元推估
+- **可判定筆數**：8 個特徵年合計 191 筆「公司 × 年份」，每年特徵、報酬、營收 CAGR 三項齊全約 18–20 檔；營收 CAGR 可判定 154 筆、UNKNOWN 37 筆（期間下市、已下市公司月營收缺漏、IFRS 口徑斷層）
+- **檢視資料後加入的兩條保守檢查**（只標記，不修正；正式資料集沿用）：
+  - **疑似減資／分割**：含息財富單日變動超過當時漲跌幅限制（2015-06 前 7%、之後 10%），該筆報酬標為不可靠。這些跳動都發生在停牌後恢復交易、參考價重設的那天（例如 2705 六福 +77%、2915 潤泰全 +39%）。FinMind 免費資料沒有減資參考價，無法還原；抽樣中 33 筆受影響
+  - **IFRS 口徑斷層**：營收比較橫跨 2012 → 2013 且相差超過 3 倍時記為缺值／UNKNOWN。2605 新興 2012 → 2013 營收跳 31.8 倍（IFRS 上路後開始合併子公司），未處理時 2013 年營收 CAGR 會被算成 84.6%
+- 期間下市以最後交易價暫估報酬並標記「下市暫估」，營收 CAGR 記為 UNKNOWN，不當成失敗
+
+### 11.3 模型實驗（待完成）
 
 | 實驗 | 內容 | 指標 | 狀態 |
 |---|---|---|---|
@@ -483,6 +504,7 @@ python verify_data.py
 | 2026-10-31 | v0.3 | 暴漲股定義改為「基本面驅動」：新增主要標記（報酬前 5% 且營收或 EPS 實質成長）與對照標記；結束價改用最後 60 個交易日平均；排除流動性最低 10% 的冷門股；更新 Algorithm 2、E1、E3、E5 與 Limitations；新增 2.3 核心目標與延伸目標，全文依此標註「（延伸）」；主要標記核心只用營收成長，門檻事先固定為 5 年年複合成長 ≥ 10%，不依測試資料調整（EPS 條件列為延伸）；README 與程式骨架同步 |
 | 2026-10-31 | v0.4 | 限縮範圍：財報與月營收只用前一年度（簡化時間一致性）；特徵從 15 項減為 10 項＋產業類別；領域規則減為 2 條；資料來源只用 FinMind；延伸目標刪除重大訊息摘要、RAG、補齊已下市公司財報，改列 Future Work；更新 Algorithm 1、2；README、`knowledge/README.md` 與程式骨架同步 |
 | 2026-11-02 | v0.5 | 與 Proposal v3 同步：參考文獻 [4] 由已撤回的 Kim 等人論文改為 Program of Thoughts；研究問題改為排序品質並新增 RQ1–RQ3；新增 3.1 Agent 工具規格；樣本加入上市滿一年；特徵寫明計算口徑與缺值處理；標記加入 ceil(0.05N) 選取規則與 UNKNOWN；「機率」改稱「模型分數」；Algorithm 1、2 改為 v3 版本；E1–E4 改為 v3 設計並新增公平比較規則；E3 改為三組加下市分層；新增 4 項限制；11.1 連結 `results/` 證據檔；README、程式 docstring 與 results/README.md 同步；Algorithm 1、2 與 Proposal v3 逐字一致；基準率區分報告用（訓練期正例率）與評估用（同輪實際正例率） |
+| 2026-11-02 | v0.5.1 | 新增資料管線 Demo（`demo_pipeline.py`、`app.py`，30 檔抽樣）與 11.2 節；新增兩條保守檢查（疑似減資／分割、IFRS 口徑斷層）；第 9、10 節與 README 同步 |
 
 ---
 
