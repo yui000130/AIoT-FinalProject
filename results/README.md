@@ -23,9 +23,9 @@
 
 | 實驗 | 預計檔案 | 內容 |
 |---|---|---|
-| E1 | `e1_ranking_metrics.csv` | 各模型與 Baseline 的 Precision@20/50、Recall@50、PR-AUC |
+| E1 | `e1_ranking_metrics.csv` | 各模型與 Baseline（含重複隨機（1,000 次））的 Precision@20/50、Recall@50、PR-AUC |
 | E2 | `e2_portfolio.csv`、`e2_portfolio.png` | 前 50 檔等權組合 vs 0050 的累積報酬與最大回撤 |
-| E3 | `e3_shap_ranking.csv`、`e3_shap.png` | SHAP 特徵排名；基本面暴漲股、炒作型暴漲股、普通股、期間下市公司四組的特徵中位數與命中率 |
+| E3 | `e3_shap_ranking.csv`、`e3_shap.png` | SHAP 特徵排名；主要正例、高報酬但未過成長門檻、其餘可判定者三組的特徵中位數與命中率，另按是否下市分層 |
 | E4 | `e4_agent_eval.csv` | Agent 報告 vs 單純 LLM 的數字正確率、證據引用率；（延伸）使用者評分 |
 | E5 | `e5_sensitivity.csv` | （延伸）觀察期 3 年 vs 5 年、主要 vs 對照標記、營收門檻 5% / 10% / 15% 的 Precision@50 比較 |
 
