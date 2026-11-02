@@ -133,7 +133,7 @@ flowchart TD
 | `find_cases` | 特徵、特徵日 | 結果已揭曉的正反案例與距離；不足時回傳空清單 |
 | `check_rules` | 特徵、訓練期門檻 | 盈餘品質與估值警示、證據值、規則說明與出處 |
 | `follow_up` | 追問、原報告、證據 ID | 只對必要證據重取或解釋；缺證據時說明限制 |
-| `verify_report` | 結構化報告、工具證據 | 核對公司、期間、單位與數值，回傳差異 |
+| `verify_report` | 結構化報告、工具證據 | 核對公司、期間、單位、數值與來源，回傳差異 |
 
 - 工具結果以 `evidence_id`、`stock_id`、`as_of`、`value`、`unit`、`source` 記錄，供報告核對使用；模型與提示詞版本一併保留。
 - 限制：工具白名單、每次請求最多 12 次工具呼叫、最多 3 輪報告生成；逾限或工具失敗時，改輸出限制說明或模板報告。
@@ -309,57 +309,57 @@ flowchart TD
 
 ```text
 INPUT query, request_date; OUTPUT report
-01  intent, stock <- parse_and_validate(query)
-02  t <- latest_April_trading_day(request_date)            // 對齊到不晚於分析日的 4 月底
-03  if stock not eligible at t: return clarification
-04  plan <- choose_allowed_tools(intent, available_state)   // 只能選白名單工具
-05  E <- execute(plan, as_of=t, max_calls=12)
-06  if critical_features_missing(E): return limited_report(E)
-07  score, shap <- score_model(E.features, valid_model_at(t))
-08  cases <- find_cases(E.features, label_available_by=t)  // 只用結果在 t 前已揭曉的案例
-09  flags, rules <- check_rules(E.features, training_thresholds)
-10  T <- evidence_bundle(E, score, shap, cases, flags, rules)
-11  for attempt in 1..3:
-12      R <- compose_structured_report(T)
-13      errors <- verify_entities_dates_units_values(R, T)
-14      if errors is empty: return R
-15      add_errors_to_revision_context(errors)
-16  return template_report(T)                              // 三次都不一致，改用模板報告
+01 intent, stock <- parse_and_validate(query)
+02 t <- latest_April_trading_day(request_date)
+03 if stock not eligible at t: return clarification
+04 plan <- choose_allowed_tools(intent, available_state)
+05 E <- execute(plan, as_of=t, max_calls=12)
+06 if critical_features_missing(E): return limited_report(E)
+07 score, shap <- score_model(E.features, valid_model_at(t))
+08 cases <- find_cases(E.features, label_available_by=t)
+09 flags, rules <- check_rules(E.features, training_thresholds)
+10 T <- evidence_bundle(E, score, shap, cases, flags, rules)
+11 for attempt in 1..3:
+12     R <- compose_structured_report(T)
+13     errors <- verify_entities_dates_units_values_sources(R,T)
+14     if errors is empty: return R
+15     add_errors_to_revision_context(errors)
+16 return template_report(T)
 FOLLOW_UP: resolve_question_using_previous_evidence_or_allowed_tools
 ```
 
 ### Algorithm 2：Point-in-Time 資料集建構（規劃中）
 
 ```text
-INPUT historical_universe, data, years = 2013..2020
+INPUT historical_universe, data, years=2013..2020
 OUTPUT table with features, returns, y_raw, y_main, availability
-01  all_rows <- empty_table()
-02  for y in years:
-03      t <- last_trading_day_of_April(y)
-04      rows_y <- empty_table()
-05      U <- eligible_TWSE_common_stocks_at(t, min_listing = 1 year)
-06      U <- remove_bottom_10pct_prior_year_trading_value(U, t)
-07      for stock in U:
-08          X, missing <- features_from_year(y-1, prices_before = t)
-09          r, r_status <- adjusted_wealth_return(stock, t, t + 5 years)   // 終點取最後 60 日平均
-10          g, g_status <- revenue_CAGR(stock, y-1, y+4)
-11          a <- time_all_required_label_inputs_available(stock, y)
-12          append(rows_y, stock, y, X, missing, r, g, a, r_status, g_status)
-13      rankable <- rows_y with reliable r
-14      winners <- top_ceil_5pct(rankable, fixed_tie_rule)
-15      for row in rows_y:
-16          if r_status is not reliable:
-17              y_raw, y_main <- UNKNOWN, UNKNOWN
-18          else if row not in winners:
-19              y_raw, y_main <- 0, 0
-20          else:
-21              y_raw <- 1
-22              y_main <- UNKNOWN if g missing else int(g >= 0.10)
-23          store_labels_and_reasons(row, y_raw, y_main)
-24      append(all_rows, rows_y)
-25  return all_rows
+01 all_rows <- empty_table()
+02 for y in years:
+03     t <- last_trading_day_of_April(y)
+04     rows_y <- empty_table()
+05     U <- eligible_TWSE_common_stocks_at(t, min_listing=1_year)
+06     U <- remove_bottom_10pct_prior_year_trading_value(U,t)
+07     for stock in U:
+08         X, missing <- features_available_by(stock,t)
+09         r, r_status <- adjusted_wealth_return(stock,t,t+5_years)
+10         g, g_status <- revenue_CAGR(stock,y-1,y+4)
+11         a <- time_all_required_label_inputs_available(stock,y)
+12         append(rows_y, stock,y,X,missing,r,g,a,r_status,g_status)
+13     rankable <- rows_y with reliable r
+14     winners <- top_ceil_5pct(rankable, fixed_tie_rule)
+15     for row in rows_y:
+16         if r_status is not reliable:
+17             y_raw, y_main <- UNKNOWN, UNKNOWN
+18         else if row not in winners:
+19             y_raw, y_main <- 0, 0
+20         else:
+21             y_raw <- 1
+22             y_main <- UNKNOWN if g missing else int(g>=0.10)
+23         store_labels_and_reasons(row,y_raw,y_main)
+24     append(all_rows, rows_y)
+25 return all_rows
 TRAINING: use rows only if label_available_time <= decision_time
-PREPROCESSING: fit imputers / scalers / encoders on training rows only
+PREPROCESSING: fit imputers/scalers/encoders on training rows only
 ```
 
 ---
@@ -482,7 +482,7 @@ python verify_data.py
 | 2026-10-31 | v0.2 | 修正相似案例檢索的時間限制（特徵日 ≤ 分析日 − 5 年）；Algorithm 1 與 Proposal 對齊；統一已下市公司資料補救方式；補上重大訊息資料來源、0050 基準資料、早期分析日無相似案例的限制；組員改為真名；新增台積電 Yahoo 股市核對表 |
 | 2026-10-31 | v0.3 | 暴漲股定義改為「基本面驅動」：新增主要標記（報酬前 5% 且營收或 EPS 實質成長）與對照標記；結束價改用最後 60 個交易日平均；排除流動性最低 10% 的冷門股；更新 Algorithm 2、E1、E3、E5 與 Limitations；新增 2.3 核心目標與延伸目標，全文依此標註「（延伸）」；主要標記核心只用營收成長，門檻事先固定為 5 年年複合成長 ≥ 10%，不依測試資料調整（EPS 條件列為延伸）；README 與程式骨架同步 |
 | 2026-10-31 | v0.4 | 限縮範圍：財報與月營收只用前一年度（簡化時間一致性）；特徵從 15 項減為 10 項＋產業類別；領域規則減為 2 條；資料來源只用 FinMind；延伸目標刪除重大訊息摘要、RAG、補齊已下市公司財報，改列 Future Work；更新 Algorithm 1、2；README、`knowledge/README.md` 與程式骨架同步 |
-| 2026-11-02 | v0.5 | 與 Proposal v3 同步：參考文獻 [4] 由已撤回的 Kim 等人論文改為 Program of Thoughts；研究問題改為排序品質並新增 RQ1–RQ3；新增 3.1 Agent 工具規格；樣本加入上市滿一年；特徵寫明計算口徑與缺值處理；標記加入 ceil(0.05N) 選取規則與 UNKNOWN；「機率」改稱「模型分數」；Algorithm 1、2 改為 v3 版本；E1–E4 改為 v3 設計並新增公平比較規則；E3 改為三組加下市分層；新增 4 項限制；11.1 連結 `results/` 證據檔；README、程式 docstring 與 results/README.md 同步 |
+| 2026-11-02 | v0.5 | 與 Proposal v3 同步：參考文獻 [4] 由已撤回的 Kim 等人論文改為 Program of Thoughts；研究問題改為排序品質並新增 RQ1–RQ3；新增 3.1 Agent 工具規格；樣本加入上市滿一年；特徵寫明計算口徑與缺值處理；標記加入 ceil(0.05N) 選取規則與 UNKNOWN；「機率」改稱「模型分數」；Algorithm 1、2 改為 v3 版本；E1–E4 改為 v3 設計並新增公平比較規則；E3 改為三組加下市分層；新增 4 項限制；11.1 連結 `results/` 證據檔；README、程式 docstring 與 results/README.md 同步；Algorithm 1、2 與 Proposal v3 逐字一致；基準率區分報告用（訓練期正例率）與評估用（同輪實際正例率） |
 
 ---
 
