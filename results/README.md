@@ -8,6 +8,17 @@
 |---|---|
 | `tsmc_crosscheck.csv` | 資料正確性核對（非實驗結果）：台積電 FinMind 數值與 Yahoo 股市逐項比對，8/8 一致，附來源網址。核對日期 2026-10-31 |
 
+## 資料可行性驗證（已完成）
+
+| 檔案 | 內容 |
+|---|---|
+| `verify_summary.md` | `verify_data.py` 的執行時間與結果總結 |
+| `verify_sample_coverage.csv` | 抽樣 30 檔（上市中 20、已下市 10）的名單，以及每檔 7 種資料是否抓到、筆數、起訖日期 |
+| `verify_dataset_summary.csv` | 各資料集在上市中與已下市公司的抓取率與最早日期 |
+| `tsmc_crosscheck.csv` | 台積電 EPS、月營收、收盤價與 Yahoo 股市的核對結果 |
+
+由 `verify_data.py` 產生（亂數種子 42），重新執行會得到相同的抽樣名單。
+
 ## 規劃中的實驗結果
 
 | 實驗 | 預計檔案 | 內容 |
