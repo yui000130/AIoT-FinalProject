@@ -100,11 +100,11 @@
 - [x] 用「每日股價＋除權息結果」自行計算 5 年含息報酬（免費 API 不提供還原股價）
 - [x] 台積電 4 季 EPS 與收盤價，與券商 App 核對 5/5 一致；另以 Yahoo 股市核對 4 季 EPS、3 個月營收、收盤價，8/8 一致（[`results/tsmc_crosscheck.csv`](results/tsmc_crosscheck.csv)）
 - [x] 系統設計文件（`DESIGN.md`）與規劃中程式的骨架
-- [x] 資料管線 Demo 網頁：用 30 檔抽樣資料示範特徵、5 年含息報酬與營收成長的計算（[`app.py`](app.py)、[`demo_pipeline.py`](demo_pipeline.py)），見下方 [Demo 網頁](#demo-網頁)
+- [x] 全市場資料收集（[`collect_data.py`](collect_data.py)）：1,322 檔（含 2012 年後下市）× 7 種資料，9,256 個任務 0 失敗；可中斷接續、自動等待 API 額度。結果見 [`results/collect_summary.md`](results/collect_summary.md)
+- [x] 資料管線 Demo 網頁：示範特徵、5 年含息報酬與營收成長的計算（有全市場資料就用全市場，否則用 30 檔抽樣）（[`app.py`](app.py)、[`demo_pipeline.py`](demo_pipeline.py)），見下方 [Demo 網頁](#demo-網頁)
 
 ### 規劃中：核心目標（必定完成）
 
-- [ ] 全市場資料收集，含已下市公司（`collect_data.py`）
 - [ ] Point-in-Time「公司 × 年份」資料集：主要標記（報酬前 5%＋營收成長）、對照標記（`build_dataset.py`）
 - [ ] LightGBM 與邏輯迴歸，三輪 walk-forward（`train.py`）
 - [ ] 實驗 E1、E2、E3（`evaluate.py`）
@@ -128,15 +128,15 @@
 
 ## Demo 網頁
 
-> 資料管線雛形：30 檔抽樣資料示範，非模型預測，也不代表全市場結論。研究與教學用途，不構成投資建議。
+> 資料管線雛形：示範特徵與 5 年結果的計算，非模型預測，也不是選股建議。研究與教學用途，不構成投資建議。
 
-在正式訓練模型之前，先用 `verify_data.py` 抓好的 30 檔抽樣資料，把「特徵怎麼算、5 年後的結果怎麼判定」做成可以操作的網頁，確認計算規則照 [DESIGN.md](DESIGN.md) 實作。這個網頁**不訓練模型、不接 LLM、不呼叫 API**，只讀本機的 `cache/`。
+在正式訓練模型之前，先把「特徵怎麼算、5 年後的結果怎麼判定」做成可以操作的網頁，確認計算規則照 [DESIGN.md](DESIGN.md) 實作。這個網頁**不訓練模型、不接 LLM、不呼叫 API**，只讀本機資料：有 `collect_data.py` 抓好的全市場資料（`data/raw/`）就用全市場，否則用 `verify_data.py` 的 30 檔抽樣（`cache/`）。頁面標示資料來源 FinMind（FinMind 授權要求）。
 
 | 分頁 | 內容 |
 |---|---|
 | ① 我們要找什麼樣的股票 | 用白話說明主要標記，並自動挑出三個例子：報酬遠高於 0050 且營收有成長、報酬高但營收沒成長、期間下市而無法判定 |
 | ② 時光機 | 選股票與特徵年，看當時可用的 10 項特徵（每項標明來源資料與公告時間、缺值原因）與 5 年後的結果 |
-| ③ 30 檔總表 | 每檔每年一列，可排序、可篩選 |
+| ③ 總表 | 每檔每年一列，可排序、可篩選 |
 
 ![我們要找什麼樣的股票](results/demo/1_target.png)
 
@@ -149,17 +149,19 @@
 
 </details>
 
-**在自己電腦上執行**（網頁只在本機開啟；原始資料不上傳，所以沒有公開網址）：
+**在自己電腦上執行**（網頁只在本機開啟；FinMind 不允許再散布原始資料，所以原始資料不上傳、沒有公開網址）：
 
 ```bash
 pip install -r requirements.txt
-python verify_data.py      # 抓 30 檔抽樣資料到 cache/（約 215 次 API，抓過就不再抓）
+python verify_data.py      # 抓 30 檔抽樣資料到 cache/（約 215 次 API，抓過就不再抓；股票清單也從這裡來）
+python collect_data.py     # （選用）抓全市場資料到 data/raw/（約 9,300 次 API，約 4～5 小時，可中斷接續）
+                           #   進度：python collect_data.py --status
 python -c "import verify_data as v; [v.fetch(d, '0050', v.START_DATE) for d in ('TaiwanStockPrice', 'TaiwanStockDividendResult')]"
                            # 補抓 0050 作為對照（2 次 API）
-streamlit run app.py       # 瀏覽器開啟 http://localhost:8501
+streamlit run app.py       # 瀏覽器開啟 http://localhost:8501（全市場第一次開啟約需 4 分鐘計算特徵，之後讀本機快取）
 ```
 
-計算規則與限制（例如 30 檔是抽樣所以不做前 5% 排名、疑似減資與 IFRS 口徑改變的處理）見 [DESIGN.md](DESIGN.md) 第 11.2 節。
+計算規則與限制（例如正式資料集建立前不做前 5% 排名、疑似減資與 IFRS 口徑改變的處理）見 [DESIGN.md](DESIGN.md) 第 11.3 節。
 
 ---
 
@@ -232,8 +234,8 @@ streamlit run app.py       # 瀏覽器開啟 http://localhost:8501
 ├── .env.example              # 環境變數範本（Token、API 端點）
 ├── .gitignore
 ├── verify_data.py            # 已完成：資料可行性驗證
-├── demo_pipeline.py          # 已完成：Demo 用的 Point-in-Time 計算（30 檔抽樣）
-├── collect_data.py           # 規劃中：全市場資料收集
+├── demo_pipeline.py          # 已完成：Demo 用的 Point-in-Time 計算（全市場或 30 檔抽樣）
+├── collect_data.py           # 已完成：全市場資料收集（可中斷接續）
 ├── build_dataset.py          # 規劃中：Point-in-Time 特徵與標記資料表
 ├── train.py                  # 規劃中：LightGBM 與邏輯迴歸訓練
 ├── evaluate.py               # 規劃中：walk-forward 回測與 Baseline 比較

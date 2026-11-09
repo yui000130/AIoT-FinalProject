@@ -24,3 +24,7 @@ Thumbs.db
 # 個人用文件，不上傳
 github_repo_prompt.md
 *.pdf
+
+# 收集的原始資料與模型（很大，不上傳）
+data/
+models/

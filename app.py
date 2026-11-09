@@ -1,10 +1,12 @@
 """
 app.py －Streamlit 網站（目前為資料管線 Demo）
 
-目前內容（只讀 cache/ 的 30 檔抽樣資料，計算見 demo_pipeline.py，不呼叫 API、不接 LLM）：
-  1. 我們要找什麼樣的股票：白話說明主要標記，自動從 30 檔挑出三種例子
+目前內容（只讀本機資料，計算見 demo_pipeline.py，不呼叫 API、不接 LLM）：
+  有 data/raw/（collect_data.py 抓的全市場資料）就用全市場，否則用 cache/ 的 30 檔抽樣。
+  原始資料只在本機，不上傳；頁面標示資料來源 FinMind（FinMind 授權要求）。
+  1. 我們要找什麼樣的股票：白話說明主要標記，自動挑出三種例子
   2. 時光機：選股票與特徵年，看當時可用的 10 項特徵與 5 年後的結果
-  3. 30 檔總表：每檔每年一列，可排序
+  3. 總表：每檔每年一列，可排序
 
 之後規劃加入的頁面（見 DESIGN.md）：
   - 個股分析：輸入股票代號與分析日期，顯示 Agent 報告、相似案例卡片，可追問
@@ -24,16 +26,21 @@ import streamlit as st
 
 import demo_pipeline as dp
 
-DISCLAIMER = "資料管線雛形：30 檔抽樣資料示範，非模型預測，也不代表全市場結論。研究與教學用途，不構成投資建議。"
+DISCLAIMER = ("資料管線雛形：示範特徵與 5 年結果的計算，非模型預測，也不是選股建議。"
+              "研究與教學用途，不構成投資建議。")
 PCT_FEATURES = {"FCF 殖利率", "ROE", "毛利率", "年營收成長率", "負債比", "過去 12 個月含息報酬"}
 COLOR_PRICE, COLOR_WEALTH = "#9AA0A6", "#1A73E8"
 COLOR_KEY, COLOR_OTHER = "#1A73E8", "#C6DAFC"
 
 
 # ───────────── 資料（快取） ─────────────
-@st.cache_data(show_spinner="計算 30 檔 × 8 年…")
+@st.cache_data(show_spinner=False)
 def get_table():
-    return dp.build_table()
+    bar = st.progress(0.0, text="計算特徵中…")
+    table = dp.build_table(progress=lambda i, n: bar.progress(
+        i / n, text=f"計算特徵：{i:,} / {n:,} 檔（全市場第一次約需數分鐘，之後直接讀本機快取）"))
+    bar.empty()
+    return table
 
 
 @st.cache_data
@@ -125,7 +132,7 @@ def show_example(kind, title, row):
     with st.container(border=True):
         if row is None:
             st.markdown(f"#### {title}")
-            st.info("30 檔抽樣中找不到符合條件的例子。")
+            st.info("目前資料中找不到符合條件的例子。")
             return
         a = get_analysis(row["代號"], int(row["特徵年"]))
         st.markdown(f"#### {title}：{row['名稱']}（{row['代號']}）· {int(row['特徵年'])} 年 4 月底")
@@ -156,7 +163,8 @@ def section_target(table):
 期間下市或資料不足的公司標為 **無法判定**，不當成失敗。
 """
     )
-    st.caption("這裡只有 30 檔抽樣，無法做「全市場前 5%」排名，所以下面的例子改用「報酬遠高於同期 0050」示意條件 1。")
+    st.caption("正式資料集（上市滿一年、流動性過濾後的母體）還沒建立，這裡先不做「全市場前 5%」排名，"
+               "下面的例子改用「報酬遠高於同期 0050」示意條件 1。")
     ex_a, ex_b, ex_c = dp.pick_examples(table)
     show_example("A", "例子 A　我們要找的類型", ex_a)
     show_example("B", "例子 B　報酬高，但沒有營收成長支撐", ex_b)
@@ -216,9 +224,9 @@ def section_time_machine(table):
     right.altair_chart(revenue_chart(a), use_container_width=True)
 
 
-# ───────────── 區塊 3：30 檔總表 ─────────────
+# ───────────── 區塊 3：總表 ─────────────
 def section_table(table):
-    st.subheader("30 檔總表")
+    st.subheader(f"總表（{table['代號'].nunique():,} 檔 × {len(dp.FEATURE_YEARS)} 年）")
     st.caption("每檔每年一列；點欄位標題可排序。報酬狀態不是 OK 的列（下市暫估、疑似減資/分割）報酬僅供參考。")
     c1, c2 = st.columns(2)
     years = c1.multiselect("特徵年", dp.FEATURE_YEARS, default=dp.FEATURE_YEARS)
@@ -243,7 +251,7 @@ def section_table(table):
     order = first + [c for c in df.columns if c not in first]
     st.dataframe(df, hide_index=True, use_container_width=True, height=620, column_config=config, column_order=order)
     st.caption(f"共 {len(df)} 列；空白（None）＝缺值，原因見最右側「缺值原因」欄。"
-               "判定只看營收成長條件（≥ 10%），報酬排名欄一律為「待全量母體」。")
+               "判定只看營收成長條件（≥ 10%），報酬排名欄一律為「待正式資料集」。")
 
 
 # ───────────── 主程式 ─────────────
@@ -251,6 +259,7 @@ def main():
     st.set_page_config(page_title="Multibagger Scout｜資料管線 Demo", layout="wide")
     st.warning(DISCLAIMER)
     st.title("Multibagger Scout｜資料管線 Demo")
+    st.caption(f"資料：{dp.SOURCE_LABEL}　｜　{dp.DATA_ATTRIBUTION}")
     missing = dp.missing_cache()
     if missing:
         st.error("cache/ 缺少 Demo 需要的資料：" + "、".join(missing) + "\n\n"
@@ -258,13 +267,15 @@ def main():
                  f"`{dp.FETCH_BENCHMARK_CMD}`")
         st.stop()
     table = get_table()
-    tab1, tab2, tab3 = st.tabs(["① 我們要找什麼樣的股票", "② 時光機", "③ 30 檔總表"])
+    tab1, tab2, tab3 = st.tabs(["① 我們要找什麼樣的股票", "② 時光機", "③ 總表"])
     with tab1:
         section_target(table)
     with tab2:
         section_time_machine(table)
     with tab3:
         section_table(table)
+    st.divider()
+    st.caption(dp.DATA_ATTRIBUTION + "原始資料只存在本機，不隨專案上傳。")
 
 
 if __name__ == "__main__":

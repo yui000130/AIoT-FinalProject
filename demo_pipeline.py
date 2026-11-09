@@ -1,7 +1,10 @@
 """
-demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀 cache/，不呼叫 API）
+demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀本機資料，不呼叫 API）
 
-用 verify_data.py 已抓好的 30 檔抽樣快取資料，照 DESIGN.md v0.5 計算：
+資料來源（自動選擇，原始資料只在本機、不上傳）：
+  - 有 data/raw/parts/（collect_data.py 抓的全市場資料）→ 用全市場
+  - 否則用 cache/（verify_data.py 抓的 30 檔抽樣）
+照 DESIGN.md v0.5 計算：
   1. 特徵日 t ＝ 第 y 年 4 月最後交易日（交易日曆取 0050 的股價日期）
   2. 10 項特徵（DESIGN 5.3）：財報與月營收只用第 y − 1 年，股價只用 t（含）以前
      零分母、負權益、不適用時記為缺值並保留原因，不硬算
@@ -14,15 +17,16 @@ demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀 cache/，不呼叫
      - 營收比較跨過 2012 → 2013 且相差超過 3 倍 → 疑似 IFRS 口徑改變，記為缺值／UNKNOWN
 
 與正式資料集（build_dataset.py）的差異：
-  - 30 檔是抽樣，不做「前 5%」排名，排名欄一律寫「待全量母體」
+  - 不做「前 5%」排名，排名欄一律寫「待正式資料集」（排名需要上市滿一年與流動性過濾後的母體）
   - 不做流動性過濾（需要全市場成交值分布）
   - 不訓練模型、不接 LLM
 
 build_dataset.py 之後可直接沿用本檔的 feature_date / compute_features /
 five_year_return / revenue_cagr 等函式。
 
-輸入：cache/*.csv（verify_data.py 產生）
-輸出：build_table() 回傳的 DataFrame（每列 = 公司 × 特徵年），供 app.py 顯示
+輸入：data/raw/parts/{dataset}/{stock_id}.parquet（collect_data.py）或 cache/*.csv（verify_data.py）
+輸出：build_table() 回傳的 DataFrame（每列 = 公司 × 特徵年），供 app.py 顯示；
+      全市場時另存 data/demo_table.parquet（本機快取，不上傳），資料沒變就不重算
 """
 
 from functools import lru_cache
@@ -34,6 +38,12 @@ import pandas as pd
 # ───────────── 設定 ─────────────
 BASE = Path(__file__).resolve().parent
 CACHE_DIR = BASE / "cache"
+PART_DIR = BASE / "data" / "raw" / "parts"          # collect_data.py 的逐檔資料
+UNIVERSE_FILE = BASE / "data" / "raw" / "universe.csv"
+TABLE_CACHE = BASE / "data" / "demo_table.parquet"   # 全市場總表的本機快取
+FULL_MARKET = (PART_DIR / "TaiwanStockPrice" / "0050.parquet").exists() and UNIVERSE_FILE.exists()
+SOURCE_LABEL = "全市場（data/raw，collect_data.py）" if FULL_MARKET else "30 檔抽樣（cache/，verify_data.py）"
+DATA_ATTRIBUTION = "資料來源：FinMind（https://finmindtrade.com/），原始資料來自臺灣證券交易所；僅供非商業研究與教學使用。"
 FEATURE_YEARS = list(range(2013, 2021))
 HORIZON_YEARS = 5
 END_PRICE_DAYS = 60            # 終點取最後 60 個交易日平均
@@ -62,14 +72,26 @@ CFO_TYPES = ["CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActi
 # ───────────── 讀快取 ─────────────
 @lru_cache(maxsize=None)
 def load(dataset, data_id="ALL"):
-    """讀 cache/{dataset}_{data_id}.csv；檔案不存在或是空檔回傳空表。不會呼叫 API。"""
-    path = CACHE_DIR / f"{dataset}_{data_id}.csv"
-    if not path.exists():
-        return pd.DataFrame()
-    try:
-        df = pd.read_csv(path, dtype={"stock_id": str}, encoding="utf-8-sig")
-    except pd.errors.EmptyDataError:
-        return pd.DataFrame()
+    """讀本機資料；檔案不存在或是空檔回傳空表。不會呼叫 API。
+
+    個股資料：全市場模式讀 data/raw/parts/{dataset}/{data_id}.parquet，否則讀 cache/{dataset}_{data_id}.csv。
+    股票清單與下市名單（data_id ＝ "ALL"）一律讀 cache/。
+    """
+    part = PART_DIR / dataset / f"{data_id}.parquet"
+    if FULL_MARKET and data_id != "ALL":
+        if not part.exists():
+            return pd.DataFrame()
+        df = pd.read_parquet(part)
+    else:
+        path = CACHE_DIR / f"{dataset}_{data_id}.csv"
+        if not path.exists():
+            return pd.DataFrame()
+        try:
+            df = pd.read_csv(path, dtype={"stock_id": str}, encoding="utf-8-sig")
+        except pd.errors.EmptyDataError:
+            return pd.DataFrame()
+    if "stock_id" in df.columns:
+        df["stock_id"] = df["stock_id"].astype(str)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
@@ -80,7 +102,10 @@ FETCH_BENCHMARK_CMD = ('python -c "import verify_data as v; '
 
 
 def missing_cache():
-    """回傳 Demo 需要但 cache/ 裡沒有的檔案（verify_data.py 不會抓 0050，需另外補抓）。"""
+    """回傳 Demo 需要但本機沒有的檔案（verify_data.py 不會抓 0050，需另外補抓）。"""
+    if FULL_MARKET:
+        need = ["TaiwanStockInfo_ALL.csv", "TaiwanStockDelisting_ALL.csv"]
+        return [n for n in need if not (CACHE_DIR / n).exists()]
     need = [f"TaiwanStockPrice_{BENCHMARK_ID}.csv", f"TaiwanStockDividendResult_{BENCHMARK_ID}.csv",
             "TaiwanStockInfo_ALL.csv", "TaiwanStockDelisting_ALL.csv"]
     missing = [n for n in need if not (CACHE_DIR / n).exists()]
@@ -90,7 +115,10 @@ def missing_cache():
 
 
 def demo_stock_ids():
-    """cache/ 裡有股價檔的抽樣股票（不含 0050）。"""
+    """有股價資料的股票（不含 0050）：全市場模式取研究範圍清單，否則取 cache/ 的 30 檔抽樣。"""
+    if FULL_MARKET:
+        uni = pd.read_csv(UNIVERSE_FILE, dtype={"stock_id": str}, encoding="utf-8-sig")
+        return sorted(s for s in uni["stock_id"] if (PART_DIR / "TaiwanStockPrice" / f"{s}.parquet").exists())
     ids = {p.stem.split("_", 1)[1] for p in CACHE_DIR.glob("TaiwanStockPrice_*.csv")}
     return sorted(ids - {BENCHMARK_ID})
 
@@ -138,7 +166,7 @@ def price_series(stock_id):
     """每日收盤價（只保留 > 0），index 為日期。"""
     p = load("TaiwanStockPrice", stock_id)
     if p.empty:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     p = p[p["close"] > 0].drop_duplicates("date", keep="last").sort_values("date")
     return p.set_index("date")["close"].astype(float)
 
@@ -499,10 +527,19 @@ def analyze(stock_id, year):
             "cagr_why": cagr_why, "verdict": growth_verdict(cagr_status, cagr)}
 
 
-def build_table():
-    """每檔每年一列：10 項特徵、5 年含息報酬、0050 同期、營收 CAGR、判定與缺值原因。"""
+def build_table(progress=None):
+    """每檔每年一列：10 項特徵、5 年含息報酬、0050 同期、營收 CAGR、判定與缺值原因。
+
+    全市場模式會把結果存到 data/demo_table.parquet；資料沒更新就直接讀，不重算（全市場重算約需數分鐘）。
+    progress：可選的回呼函式 progress(已完成檔數, 總檔數)，給網頁顯示進度條。
+    """
+    if FULL_MARKET and TABLE_CACHE.exists() and TABLE_CACHE.stat().st_mtime >= _data_mtime():
+        return pd.read_parquet(TABLE_CACHE)
     rows = []
-    for sid in demo_stock_ids():
+    ids = demo_stock_ids()
+    for i, sid in enumerate(ids, 1):
+        if progress:
+            progress(i, len(ids))
         for y in FEATURE_YEARS:
             a = analyze(sid, y)
             if a is None:
@@ -524,14 +561,23 @@ def build_table():
                 "營收 CAGR": a["cagr"],
                 "CAGR 狀態": a["cagr_status"],
                 "判定": a["verdict"],
-                "排名": "待全量母體",
+                "排名": "待正式資料集",
                 "樣本備註": "" if a["listed_1y"] else "上市未滿一年（正式樣本不納入）",
                 "缺值原因": "；".join(missing),
                 "報酬說明": a["ret"]["note"],
                 "CAGR 說明": a["cagr_why"],
             })
             rows.append(row)
-    return pd.DataFrame(rows)
+    table = pd.DataFrame(rows)
+    if FULL_MARKET:
+        table.to_parquet(TABLE_CACHE, index=False)
+    return table
+
+
+def _data_mtime():
+    """全市場資料最後更新時間（各資料集資料夾的修改時間；新增或覆寫小檔都會更新）。"""
+    times = [d.stat().st_mtime for d in PART_DIR.iterdir() if d.is_dir()]
+    return max(times + [UNIVERSE_FILE.stat().st_mtime])
 
 
 def revenue_bars(stock_id, year):
