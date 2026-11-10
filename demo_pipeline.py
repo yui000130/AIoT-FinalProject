@@ -8,12 +8,15 @@ demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀本機資料，不�
   1. 特徵日 t ＝ 第 y 年 4 月最後交易日（交易日曆取 0050 的股價日期）
   2. 10 項特徵（DESIGN 5.3）：財報與月營收只用第 y − 1 年，股價只用 t（含）以前
      零分母、負權益、不適用時記為缺值並保留原因，不硬算
-  3. t → t + 5 年含息報酬（DESIGN 5.4）：每日股價＋除權息結果自行計算，
+  3. t → t + 5 年含息報酬（DESIGN 5.4）：每日股價＋公司行動因子（除權息、減資、分割）自行計算，
      終點取最後 60 個交易日含息財富序列的平均；同期 0050 一起算作對照
+     市值的股數 ＝ 年底股本 ÷ 10，再修正年底後至特徵日間的減資與所有分割／面額變更
   4. 營收 CAGR：第 y − 1 年 → 第 y + 4 年全年營收；期初須為正、5 年資料齊全，
      期間下市不滿 5 年記為 UNKNOWN
-  5. DESIGN 沒寫、看資料後加的兩個保守檢查（都只標記，不硬修正）：
-     - 含息財富單日變動超過漲跌幅限制 → 疑似減資／分割，報酬標為不可靠
+  5. 樣本範圍＝上市：特徵日時仍在興櫃（價格不在升降單位上）的公司 × 年不納入（上櫃轉上市無法用價格區分，列為限制）
+  6. DESIGN 沒寫、看資料後加的兩個保守檢查（都只標記，不硬修正）：
+     - 含息財富單日變動超過漲跌幅限制（興櫃期間除外）→ 報酬標為不可靠
+       （減資、分割已處理；剩下的多為長期停牌重整或資料錯誤）
      - 營收比較跨過 2012 → 2013 且相差超過 3 倍 → 疑似 IFRS 口徑改變，記為缺值／UNKNOWN
 
 與正式資料集（build_dataset.py）的差異：
@@ -53,9 +56,11 @@ BENCHMARK_ID = "0050"
 MAX_STALE_DAYS = 30            # 特徵日前 30 天內沒有成交，視為當時未在交易
 IFRS_FIRST_YEAR = 2013         # 台灣上市櫃公司 IFRS 首年；跨過這年的營收比較要檢查口徑
 IFRS_JUMP = 3                  # 2012 → 2013 營收相差超過 3 倍視為口徑改變
-# 漲跌幅限制：2015-06-01 前 7%、之後 10%；超過即疑似減資／分割（含息因子已扣除除權息）
+# 漲跌幅限制：2015-06-01 前 7%、之後 10%；含息財富（已扣除除權息、減資、分割）單日超過即價格異常
 LIMIT_CHANGE_DATE = pd.Timestamp("2015-06-01")
 JUMP_TOL_OLD, JUMP_TOL_NEW = 0.075, 0.105
+# 樣本範圍＝上市；特徵日前 90 天內有 ≥ 5 天興櫃價（不在升降單位上）→ 當時尚未上市，不納入
+EMERGING_LOOKBACK_DAYS, EMERGING_MIN_DAYS = 90, 5
 
 FEATURES = [
     "市值（億元）", "FCF 殖利率", "帳面/市值", "本益比", "ROE",
@@ -128,7 +133,8 @@ def stock_meta(stock_id):
     """名稱、市場、產業（產業類別取 TaiwanStockInfo 現況，已下市者無資料）、下市日。"""
     info = load("TaiwanStockInfo")
     dl = load("TaiwanStockDelisting")
-    row = info[info["stock_id"] == stock_id] if len(info) else info
+    row = info[info["stock_id"] == stock_id].sort_values("date") if len(info) else info
+    row = row.iloc[[-1]] if len(row) else row   # 同一檔可能有興櫃、上市櫃多筆，取最新一筆
     drow = dl[dl["stock_id"] == stock_id] if len(dl) else dl
     delisted = drow["date"].iloc[0] if len(drow) else None
     if len(row):
@@ -171,17 +177,128 @@ def price_series(stock_id):
     return p.set_index("date")["close"].astype(float)
 
 
+def _ratio_series(df, before_col, after_col):
+    """before ÷ after，同日多筆相乘；回傳以日期為 index 的 Series。"""
+    if df.empty:
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    ok = (df[before_col] > 0) & (df[after_col] > 0)
+    f = (df.loc[ok, before_col] / df.loc[ok, after_col]).groupby(df.loc[ok, "date"]).prod()
+    f.index = pd.DatetimeIndex(f.index)
+    return f
+
+
+@lru_cache(maxsize=None)
+def capital_reductions(stock_id):
+    """減資紀錄（date ＝ 減資後恢復買賣日），附「股數比 k」＝ 減資後股數 ÷ 減資前股數。
+
+    參考價公式（交易所）：
+      彌補虧損：P_ref ＝ P_old ÷ k                    → k ＝ P_old ÷ P_ref
+      現金減資：P_ref ＝ (P_old − 退還現金) ÷ k，每股退 10 ×（1 − k）元
+                                                     → k ＝ (P_old − 10) ÷ (P_ref − 10)
+    現金減資的 k 假設按面額 10 元退款；算不出合理值（不在 0～1）時退回 P_old ÷ P_ref。
+    """
+    c = load("TaiwanStockCapitalReductionReferencePrice", stock_id)
+    if c.empty:
+        return pd.DataFrame(columns=["date", "p_old", "p_ref", "cash", "k"])
+    c = c.rename(columns={"ClosingPriceonTheLastTradingDay": "p_old", "PostReductionReferencePrice": "p_ref"})
+    c = c[(c["p_old"] > 0) & (c["p_ref"] > 0)].copy()
+    reason = c["ReasonforCapitalReduction"].astype(str)
+    c["cash"] = reason.str.contains("Cash|現金")
+    k_loss = c["p_old"] / c["p_ref"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        k_cash = (c["p_old"] - FACE_VALUE) / (c["p_ref"] - FACE_VALUE)
+    k_cash = k_cash.where((k_cash > 0) & (k_cash <= 1), k_loss)
+    c["k"] = np.where(c["cash"], k_cash, k_loss)
+    return c[["date", "p_old", "p_ref", "cash", "k"]].sort_values("date").reset_index(drop=True)
+
+
+@lru_cache(maxsize=None)
+def splits(stock_id):
+    """股票分割／面額變更（date ＝ 恢復買賣日），k ＝ 分割後股數 ÷ 分割前股數 ＝ 前價 ÷ 後價。"""
+    s = load("TaiwanStockSplitPrice", stock_id)
+    if s.empty:
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    return _ratio_series(s, "before_price", "after_price").sort_index()
+
+
+def _tick(p):
+    """台股升降單位（2005 年以來不變）：<10 元 0.01、<50 0.05、<100 0.1、<500 0.5、<1000 1、其餘 5。"""
+    return np.select([p < 10, p < 50, p < 100, p < 500, p < 1000], [0.01, 0.05, 0.1, 0.5, 1], 5)
+
+
+@lru_cache(maxsize=None)
+def emerging_days(stock_id):
+    """疑似興櫃交易的日期：開高低收任一不在升降單位上。
+
+    FinMind 的日股價把興櫃與上市櫃期間接在同一條序列；興櫃以議價成交、報的是均價（例如 180.61），
+    不受升降單位與漲跌幅限制。上市櫃股票的成交價一定落在升降單位上，藉此區分。
+    """
+    p = load("TaiwanStockPrice", stock_id)
+    if p.empty or stock_id == BENCHMARK_ID:   # ETF 升降單位不同，0050 不做此檢查
+        return pd.DatetimeIndex([])
+    p = p[p["close"] > 0]
+    bad =np.zeros(len(p), dtype=bool)
+    for col in ["open", "max", "min", "close"]:
+        v = p[col].to_numpy(dtype=float)
+        q = v / _tick(v)
+        bad |= (v > 0) & (np.abs(q - np.round(q)) > 1e-6)
+    return pd.DatetimeIndex(p.loc[bad, "date"]).unique().sort_values()
+
+
+def emerging_count(stock_id, start, end):
+    """(start, end] 之間疑似興櫃交易的天數。"""
+    e = emerging_days(stock_id)
+    return int(((e > start) & (e <= end)).sum())
+
+
+def on_emerging(stock_id, t):
+    """特徵日 t 時是否仍在興櫃（尚未上市櫃）：t 前 EMERGING_LOOKBACK_DAYS 天內有 ≥ EMERGING_MIN_DAYS 天疑似興櫃價。"""
+    return emerging_count(stock_id, t - pd.Timedelta(days=EMERGING_LOOKBACK_DAYS), t) >= EMERGING_MIN_DAYS
+
+
 @lru_cache(maxsize=None)
 def dividend_factors(stock_id):
-    """每個除權息日的因子 ＝ 除權息前價格 ÷ 除權息後價格（參考價），同日多筆相乘。"""
+    """所有公司行動的報酬因子（同日多筆相乘），用於含息財富序列：
+
+      除權息：除權息前價格 ÷ 除權息後價格（參考價）
+      減資  ：減資前最後交易日收盤價 ÷ 減資後參考價（現金減資等於把退回的現金再投入）
+      分割  ：分割前價格 ÷ 分割後價格（股票分割、面額變更）
+    """
+    parts = []
     d = load("TaiwanStockDividendResult", stock_id)
-    if d.empty:
+    if not d.empty:
+        d = d.assign(after=d["after_price"].where(d["after_price"] > 0, d["reference_price"]))
+        parts.append(_ratio_series(d, "before_price", "after"))
+    c = capital_reductions(stock_id)
+    if len(c):
+        parts.append(_ratio_series(c, "p_old", "p_ref"))
+    s = splits(stock_id)
+    if len(s):
+        parts.append(s)
+    parts = [p for p in parts if len(p)]
+    if not parts:
         return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-    after = d["after_price"].where(d["after_price"] > 0, d["reference_price"])
-    ok = (d["before_price"] > 0) & (after > 0)
-    f = (d.loc[ok, "before_price"] / after[ok]).groupby(d.loc[ok, "date"]).prod()
-    f.index = pd.DatetimeIndex(f.index)
-    return f.sort_index()
+    f = pd.concat(parts)
+    return f.groupby(level=0).prod().sort_index()
+
+
+def share_multiplier(stock_id, after, upto):
+    """股本日期 after（不含）→ 特徵日 upto（含）之間的減資與分割，對「股本 ÷ 面額」股數的修正倍數。
+
+    分割／面額變更：股本不變、股數變多，任何時點之後都要乘上（面額不是 10 元的公司也靠這個修正）。
+    減資：年底股本已反映年底前的減資，只修正 after 之後才恢復買賣的減資。
+    """
+    s = splits(stock_id)
+    m_split = float(s[s.index <= upto].prod()) if len(s) else 1.0
+    c = capital_reductions(stock_id)
+    c = c[(c["date"] > after) & (c["date"] <= upto)] if len(c) else c
+    m_red = float(c["k"].prod()) if len(c) else 1.0
+    notes = []
+    if m_split != 1.0:
+        notes.append(f"分割／面額變更，股數 × {m_split:.4g}")
+    for _, r in c.iterrows():
+        notes.append(f"{r['date']:%Y-%m-%d} {'現金減資' if r['cash'] else '減資'}，股數 × {r['k']:.4g}")
+    return m_split * m_red, "；".join(notes)
 
 
 def wealth_series(stock_id, start, end):
@@ -200,13 +317,20 @@ def wealth_series(stock_id, start, end):
     return pd.DataFrame({"close": p, "wealth": p * cum, "factor": cum})
 
 
-def price_jumps(ws):
-    """含息財富單日變動超過當時漲跌幅限制的日期 → 疑似減資、分割等未處理的公司行動。"""
+def price_jumps(ws, stock_id=None):
+    """含息財富單日變動超過當時漲跌幅限制的日期 → 疑似未處理的公司行動或資料錯誤。
+
+    有 stock_id 時，當天或前一個交易日是興櫃價（沒有漲跌幅限制）的跳動不算。
+    """
     if len(ws) < 2:
         return []
     r = ws["wealth"] / ws["wealth"].shift(1) - 1
     tol = np.where(r.index < LIMIT_CHANGE_DATE, JUMP_TOL_OLD, JUMP_TOL_NEW)
-    bad = r[(r.abs() > tol) & r.notna()]
+    flag = (r.abs() > tol) & r.notna()
+    if stock_id is not None and flag.any():
+        emer = pd.Series(ws.index.isin(emerging_days(stock_id)), index=ws.index)
+        flag &= ~(emer | emer.shift(1, fill_value=False))
+    bad = r[flag]
     return [d.strftime("%Y-%m-%d") for d in bad.index]
 
 
@@ -225,7 +349,7 @@ def five_year_return(stock_id, year):
     status：
       OK          ＝ 可靠
       下市暫估     ＝ 期間停止交易，以最後交易日價格暫估（不可靠，不參與判定）
-      疑似減資/分割 ＝ 單日變動超過漲跌幅限制，未處理的公司行動會讓報酬失真（不可靠）
+      價格異常     ＝ 含息財富單日變動超過漲跌幅限制（長期停牌重整、資料錯誤等），報酬不可靠
       未在交易     ＝ 特徵日時沒有成交資料
     """
     t, end = feature_date(year), horizon_end(year)
@@ -235,7 +359,7 @@ def five_year_return(stock_id, year):
     if d0 is None:
         return out
     ws = wealth_series(stock_id, d0, end)
-    out["jumps"] = price_jumps(ws)
+    out["jumps"] = price_jumps(ws, stock_id)
     last = ws.index[-1]
     if (end - last).days > MAX_STALE_DAYS:
         # 期間下市或長期停止交易：不平均，直接用最後交易日價格暫估
@@ -247,8 +371,8 @@ def five_year_return(stock_id, year):
     out.update(total=tail["wealth"].mean() / p0 - 1, price_only=tail["close"].mean() / p0 - 1,
                status="OK", note=f"終點取 {tail.index[0]:%Y-%m-%d}～{tail.index[-1]:%Y-%m-%d} 共 {len(tail)} 日平均")
     if out["jumps"]:
-        out["status"] = "疑似減資/分割"
-        out["note"] = f"{', '.join(out['jumps'][:3])} 單日變動超過漲跌幅限制，可能有未處理的減資或分割"
+        out["status"] = "價格異常"
+        out["note"] = f"{', '.join(out['jumps'][:3])} 單日變動超過漲跌幅限制，可能是長期停牌重整或資料錯誤"
     return out
 
 
@@ -259,8 +383,8 @@ def trailing_12m_return(stock_id, t):
     if d1 is None or d0 is None:
         return np.nan, "一年前尚無成交資料"
     ws = wealth_series(stock_id, d0, d1)
-    if price_jumps(ws):
-        return np.nan, "期間單日變動超過漲跌幅限制（疑似減資/分割），報酬不可靠"
+    if price_jumps(ws, stock_id):
+        return np.nan, "期間單日變動超過漲跌幅限制（價格異常），報酬不可靠"
     return ws["wealth"].iloc[-1] / p0 - 1, ""
 
 
@@ -382,8 +506,12 @@ def compute_features(stock_id, year):
     elif shares_cap is None or shares_cap <= 0:
         mcap, why = None, f"{fy} 年底資產負債表無股本"
     else:
-        mcap, why = p_t * shares_cap / FACE_VALUE, ""
-    feats["市值（億元）"] = _feat(mcap / 1e8 if mcap else None, f"股價 × 股本 ÷ 面額 {FACE_VALUE} 元",
+        mult, adj_note = share_multiplier(stock_id, fy_end, t)
+        mcap, why = p_t * shares_cap / FACE_VALUE * mult, ""
+        if adj_note:
+            price_src += f"（{adj_note}）"
+    feats["市值（億元）"] = _feat(mcap / 1e8 if mcap else None,
+                                f"股價 × 股本 ÷ 面額 {FACE_VALUE} 元（年底後的減資、分割修正股數）",
                                 f"{price_src}＋{bs_src} 股本", f"股價：特徵日；股本：{annual_deadline}", why)
 
     # FCF 殖利率
@@ -510,14 +638,20 @@ def benchmark_return(year):
 
 
 def analyze(stock_id, year):
-    """單一公司 × 特徵年的完整結果（app 的時光機用）；特徵日時未在交易則回傳 None。"""
+    """單一公司 × 特徵年的完整結果（app 的時光機用）。
+
+    特徵日時未在交易，或仍在興櫃（尚未上市）則回傳 None：樣本範圍是上市公司，
+    興櫃公司等真正上市之後的特徵年才納入。
+    """
     t = feature_date(year)
     d_t, _ = start_price(stock_id, t)
-    if d_t is None:
+    if d_t is None or (stock_id != BENCHMARK_ID and on_emerging(stock_id, t)):
         return None
     meta = stock_meta(stock_id)
     first = price_series(stock_id).index[0]
-    listed_1y = first <= t - pd.DateOffset(years=1)
+    one_year_ago = t - pd.DateOffset(years=1)
+    # 上市滿一年：一年前就有成交，且這一年內沒有興櫃價
+    listed_1y = first <= one_year_ago and emerging_count(stock_id, one_year_ago, t) < EMERGING_MIN_DAYS
     feats = compute_features(stock_id, year)
     ret = five_year_return(stock_id, year)
     bm = benchmark_return(year)
@@ -575,9 +709,9 @@ def build_table(progress=None):
 
 
 def _data_mtime():
-    """全市場資料最後更新時間（各資料集資料夾的修改時間；新增或覆寫小檔都會更新）。"""
+    """全市場資料或計算程式的最後更新時間（資料夾修改時間＋本檔修改時間；改了計算方式也要重算）。"""
     times = [d.stat().st_mtime for d in PART_DIR.iterdir() if d.is_dir()]
-    return max(times + [UNIVERSE_FILE.stat().st_mtime])
+    return max(times + [UNIVERSE_FILE.stat().st_mtime, Path(__file__).stat().st_mtime])
 
 
 def revenue_bars(stock_id, year):

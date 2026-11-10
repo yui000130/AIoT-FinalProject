@@ -161,7 +161,7 @@ python -c "import verify_data as v; [v.fetch(d, '0050', v.START_DATE) for d in (
 streamlit run app.py       # 瀏覽器開啟 http://localhost:8501（全市場第一次開啟約需 4 分鐘計算特徵，之後讀本機快取）
 ```
 
-計算規則與限制（例如正式資料集建立前不做前 5% 排名、疑似減資與 IFRS 口徑改變的處理）見 [DESIGN.md](DESIGN.md) 第 11.3 節。
+計算規則與限制（例如正式資料集建立前不做前 5% 排名、減資與分割的還原、興櫃期間排除、價格異常與 IFRS 口徑改變的處理）見 [DESIGN.md](DESIGN.md) 第 11.3 節。
 
 ---
 

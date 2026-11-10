@@ -216,7 +216,7 @@ def section_time_machine(table):
     notes = [f"報酬：{ret['note']}" if ret["note"] else "", f"營收 CAGR：{a['cagr_why']}" if a["cagr_why"] else "",
              f"0050：{bm['note']}"]
     st.caption("　".join(n for n in notes if n))
-    if ret["status"] in {"下市暫估", "疑似減資/分割"}:
+    if ret["status"] in {"下市暫估", "價格異常"}:
         st.warning("這筆報酬不可靠（" + ret["status"] + "），僅供參考。")
 
     left, right = st.columns(2)
@@ -227,7 +227,7 @@ def section_time_machine(table):
 # ───────────── 區塊 3：總表 ─────────────
 def section_table(table):
     st.subheader(f"總表（{table['代號'].nunique():,} 檔 × {len(dp.FEATURE_YEARS)} 年）")
-    st.caption("每檔每年一列；點欄位標題可排序。報酬狀態不是 OK 的列（下市暫估、疑似減資/分割）報酬僅供參考。")
+    st.caption("每檔每年一列；點欄位標題可排序。報酬狀態不是 OK 的列（下市暫估、價格異常）報酬僅供參考。")
     c1, c2 = st.columns(2)
     years = c1.multiselect("特徵年", dp.FEATURE_YEARS, default=dp.FEATURE_YEARS)
     verdicts = c2.multiselect("判定", ["符合成長條件", "不符合成長條件", "無法判定"],

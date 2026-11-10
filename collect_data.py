@@ -1,9 +1,10 @@
 """
 collect_data.py －全市場資料收集
 
-收集臺灣證券交易所上市普通股（包含 2012 年後下市的公司）的 7 種 FinMind 資料：
-損益表、資產負債表、現金流量表、月營收、每日股價、本益比/淨值比/殖利率、除權息結果。
-另外抓 0050 的每日股價與除權息結果，作為實驗 E2 的買進持有基準（0050 是 ETF，不在普通股清單內）。
+收集臺灣證券交易所上市普通股（包含 2012 年後下市的公司）的 9 種 FinMind 資料：
+（研究範圍只有上市；上櫃與興櫃不納入，2026-11-10 決定）
+損益表、資產負債表、現金流量表、月營收、每日股價、本益比/淨值比/殖利率、除權息結果、減資恢復買賣參考價、股票分割參考價。
+另外抓 0050 的每日股價、除權息結果與分割參考價，作為實驗 E2 的買進持有基準（0050 是 ETF，不在普通股清單內）。
 
 設計要求：
   - 自動等待：API 次數用完（402）時每 5 分鐘試一次，額度恢復後繼續
@@ -12,7 +13,7 @@ collect_data.py －全市場資料收集
   - 輸出 Parquet：全部抓完後，每個資料集合併成一個檔案
 
 額度：2026-11-09 實測未註冊每小時約 2,200 次（以過去一小時滾動計算），比官方文件寫的 300 次多。
-全市場約 1,320 檔 × 7 種 ≈ 9,300 次，約需 4～5 小時（可分多次跑）。
+全市場約 1,320 檔 × 9 種 ≈ 11,900 次，約需 5～6 小時（可分多次跑；之後新增資料集只會抓新的部分）。
 
 執行：
   python collect_data.py              # 開始或接續收集，全部完成後自動合併
@@ -59,8 +60,10 @@ DATASETS = [
     "TaiwanStockPrice",
     "TaiwanStockPER",
     "TaiwanStockDividendResult",
+    "TaiwanStockCapitalReductionReferencePrice",   # 減資恢復買賣參考價（2026-11-10 加入，修正含息報酬）
+    "TaiwanStockSplitPrice",                       # 股票分割／面額變更參考價（同上）
 ]
-BENCHMARK_DATASETS = ["TaiwanStockPrice", "TaiwanStockDividendResult"]
+BENCHMARK_DATASETS = ["TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockSplitPrice"]  # 0050 於 2025 年分割
 
 
 DS_SHORT = {   # 進度顯示用的簡稱
@@ -71,6 +74,8 @@ DS_SHORT = {   # 進度顯示用的簡稱
     "TaiwanStockPrice": "股價",
     "TaiwanStockPER": "本益比",
     "TaiwanStockDividendResult": "除權息",
+    "TaiwanStockCapitalReductionReferencePrice": "減資",
+    "TaiwanStockSplitPrice": "分割",
 }
 LOG_FILE = RAW_DIR / "collect.log"
 PROGRESS_FILE = RAW_DIR / "progress.csv"    # 每檔股票 × 資料集的結果，可用 Excel 開
@@ -259,9 +264,10 @@ def from_cache(dataset, stock_id):
 
 
 def merge_parts():
-    """把每個資料集的小檔合併成 data/raw/{dataset}.parquet。"""
+    """把每個資料集的小檔合併成 data/raw/{dataset}.parquet（只合併研究範圍內的股票與 0050）。"""
+    keep = set(pd.read_csv(RAW_DIR / "universe.csv", dtype={"stock_id": str})["stock_id"]) | {BENCHMARK_ID}
     for ds in sorted({*DATASETS, *BENCHMARK_DATASETS}):
-        files = sorted((PART_DIR / ds).glob("*.parquet"))
+        files = sorted(f for f in (PART_DIR / ds).glob("*.parquet") if f.stem in keep)
         frames = [df for df in (pd.read_parquet(f) for f in files) if len(df)]
         if not frames:
             continue
