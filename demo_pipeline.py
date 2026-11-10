@@ -9,7 +9,7 @@ demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀本機資料，不�
   2. 10 項特徵（DESIGN 5.3）：財報與月營收只用第 y − 1 年，股價只用 t（含）以前
      零分母、負權益、不適用時記為缺值並保留原因，不硬算
   3. t → t + 5 年含息報酬（DESIGN 5.4）：每日股價＋公司行動因子（除權息、減資、分割）自行計算，
-     終點取最後 60 個交易日含息財富序列的平均；同期 0050 一起算作對照
+     終點取最後 20 個交易日（約一個月）含息財富序列的平均；同期 0050 一起算作對照
      市值的股數 ＝ 年底股本 ÷ 10，再修正年底後至特徵日間的減資與所有分割／面額變更
   4. 營收 CAGR：第 y − 1 年 → 第 y + 4 年全年營收；期初須為正、5 年資料齊全，
      期間下市不滿 5 年記為 UNKNOWN
@@ -49,7 +49,7 @@ SOURCE_LABEL = "全市場（data/raw，collect_data.py）" if FULL_MARKET else "
 DATA_ATTRIBUTION = "資料來源：FinMind（https://finmindtrade.com/），原始資料來自臺灣證券交易所；僅供非商業研究與教學使用。"
 FEATURE_YEARS = list(range(2013, 2021))
 HORIZON_YEARS = 5
-END_PRICE_DAYS = 60            # 終點取最後 60 個交易日平均
+END_PRICE_DAYS = 20            # 終點取最後 20 個交易日（約一個月）平均；v0.5.4 由 60 改為 20
 GROWTH_CAGR = 0.10             # 營收 5 年年複合成長門檻（事先固定）
 FACE_VALUE = 10                # 股數 ＝ 股本 ÷ 面額；面額一律假設 10 元
 BENCHMARK_ID = "0050"
@@ -344,7 +344,7 @@ def start_price(stock_id, t):
 
 
 def five_year_return(stock_id, year):
-    """t → t + 5 年的含息報酬與只看股價的報酬；終點取最後 60 個交易日平均。
+    """t → t + 5 年的含息報酬與只看股價的報酬；終點取最後 20 個交易日平均。
 
     status：
       OK          ＝ 可靠

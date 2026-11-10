@@ -74,7 +74,7 @@ def fmt_feature(name, v):
 
 # ───────────── 圖 ─────────────
 def wealth_chart(a, height=260):
-    """股價與含息財富兩條線（起點相同 = 特徵日收盤價），標出終點平均的 60 個交易日。"""
+    """股價與含息財富兩條線（起點相同 = 特徵日收盤價），標出終點平均的 20 個交易日。"""
     ret = a["ret"]
     ws = get_wealth(a["stock_id"], ret["start_date"], dp.horizon_end(a["year"]))
     df = ws.reset_index().rename(columns={"index": "日期", "date": "日期", "close": "只看股價", "wealth": "含息財富"})
@@ -90,7 +90,7 @@ def wealth_chart(a, height=260):
     if ret["status"] != "下市暫估" and len(df) >= dp.END_PRICE_DAYS:
         band = pd.DataFrame({"start": [df["日期"].iloc[-dp.END_PRICE_DAYS]], "end": [df["日期"].iloc[-1]]})
         layers.insert(0, alt.Chart(band).mark_rect(opacity=0.12, color=COLOR_WEALTH).encode(x="start:T", x2="end:T"))
-    return alt.layer(*layers).properties(height=height, title="股價走勢與含息財富（陰影 = 終點取平均的最後 60 個交易日）")
+    return alt.layer(*layers).properties(height=height, title="股價走勢與含息財富（陰影 = 終點取平均的最後 20 個交易日）")
 
 
 def revenue_chart(a, height=260):
@@ -156,7 +156,7 @@ def section_target(table):
 具體來說，「主要標記」要同時滿足兩個條件：
 
 1. **報酬夠高**：從 4 月底起持有 5 年的含息報酬（股利再投入），在全市場排名 **前 5%**。
-   終點取最後 60 個交易日的平均，避免剛好碰上短線高點。
+   終點取最後 20 個交易日（約一個月）的平均，避免剛好碰上短線高點或急跌。
 2. **有營收成長撐腰**：營收從前一年（第 y − 1 年）到第 y + 4 年，**每年複合成長 ≥ 10%**（5 年累計約 +61%）。
 
 只有條件 1 的股票，漲幅可能來自炒作或本益比變高；加上條件 2，才是我們想從基本面事先辨識的類型。
