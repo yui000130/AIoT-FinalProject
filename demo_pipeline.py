@@ -4,7 +4,7 @@ demo_pipeline.py －Demo 用的 Point-in-Time 計算（只讀本機資料，不�
 資料來源（自動選擇，原始資料只在本機、不上傳）：
   - 有 data/raw/parts/（collect_data.py 抓的全市場資料）→ 用全市場
   - 否則用 cache/（verify_data.py 抓的 30 檔抽樣）
-照 DESIGN.md v0.5 計算：
+照 DESIGN.md（v0.6）計算：
   1. 特徵日 t ＝ 第 y 年 4 月最後交易日（交易日曆取 0050 的股價日期）
   2. 10 項特徵（DESIGN 5.3）：財報與月營收只用第 y − 1 年，股價只用 t（含）以前
      零分母、負權益、不適用時記為缺值並保留原因，不硬算
